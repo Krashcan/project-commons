@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [staging]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.services }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read service paths from ci-config.yml
+        id: paths
+        run: |
+          # Build a dorny/paths-filter config from ci-config.yml
+          # Requires yq
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          filters=""
+          for svc in $(yq '.services | keys | .[]' .github/ci-config.yml); do
+            path=$(yq ".services.${svc}.path" .github/ci-config.yml)
+            filters="${filters}${svc}:\n  - '${path}/**'\n"
+          done
+          echo "filters<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$filters" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: ${{ steps.paths.outputs.filters }}
+
+      - name: Build changed-services list
+        id: filter
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 2>/dev/null || true
+          sudo chmod +x /usr/local/bin/yq
+
+          services="[]"
+          for svc in $(yq '.services | keys | .[]' .github/ci-config.yml); do
+            # dorny/paths-filter outputs a boolean per filter name
+            if [ "${{ steps.changes.outputs[svc] }}" = "true" ]; then
+              services=$(echo "$services" | yq -o=json ". += [\"${svc}\"]")
+            fi
+          done
+          echo "services=${services}" >> "$GITHUB_OUTPUT"
+          echo "Changed services: ${services}"
+
+  test:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+    name: test (${{ matrix.service }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read service config
+        id: config
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          svc="${{ matrix.service }}"
+          echo "language=$(yq ".services.${svc}.language" .github/ci-config.yml)" >> "$GITHUB_OUTPUT"
+          echo "version=$(yq ".services.${svc}.version" .github/ci-config.yml)"   >> "$GITHUB_OUTPUT"
+          echo "path=$(yq ".services.${svc}.path" .github/ci-config.yml)"         >> "$GITHUB_OUTPUT"
+          echo "install=$(yq ".services.${svc}.install" .github/ci-config.yml)"   >> "$GITHUB_OUTPUT"
+          echo "test=$(yq ".services.${svc}.test" .github/ci-config.yml)"         >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        if: steps.config.outputs.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.config.outputs.version }}
+
+      - name: Set up Node.js
+        if: steps.config.outputs.language == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.config.outputs.version }}
+
+      - name: Install dependencies
+        working-directory: ${{ steps.config.outputs.path }}
+        run: ${{ steps.config.outputs.install }}
+
+      - name: Run tests
+        working-directory: ${{ steps.config.outputs.path }}
+        run: ${{ steps.config.outputs.test }}

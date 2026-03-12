@@ -1,0 +1,16 @@
+# CI service definitions — edit this file to configure test commands.
+# Workflows in .github/workflows/ read from here, so they rarely need changes.
+
+services:
+  backend:
+    path: backend
+    language: python
+    version: "3.13"
+    install: pip install -r requirements.txt
+    test: python -m pytest tests/ -v
+  frontend:
+    path: frontend
+    language: node
+    version: "20"
+    install: npm ci
+    test: npx tsc --noEmit && npx eslint . && npx vite build
