@@ -19,6 +19,10 @@ on:
     branches:
       - staging
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   create-pr:
     runs-on: ubuntu-latest
