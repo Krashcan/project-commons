@@ -7,11 +7,15 @@ if [ -f "CLAUDE.md" ]; then
 fi
 
 cat > CLAUDE.md << 'EOF'
-## TDD
-- Always write the test first
-- Run tests to confirm red before writing implementation
-- Write minimal code to pass — no more
-- Confirm green before moving to next test
+# Project Instructions
+
+<!-- Update this file with project-specific details so Claude understands your codebase. -->
+<!-- Examples of what to include: -->
+<!-- - Tech stack and frameworks used -->
+<!-- - How to build, test, and run the project -->
+<!-- - Code style and conventions -->
+<!-- - Project structure overview -->
+<!-- - Any project-specific rules or constraints -->
 EOF
 
-echo "✅ Created CLAUDE.md"
+echo "✅ Created CLAUDE.md — update it with your project details"
